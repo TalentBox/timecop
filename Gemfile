@@ -3,6 +3,7 @@ source "https://rubygems.org"
 gemspec
 
 group :development do
+  gem "rdoc"
   gem 'rake'
   gem 'nokogiri'
   gem 'pry'

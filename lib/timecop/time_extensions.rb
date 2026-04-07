@@ -82,18 +82,18 @@ class Date #:nodoc:
 
     alias_method :strptime, :strptime_with_mock_date
 
-    def parse_with_mock_date(*args)
-      parsed_date = parse_without_mock_date(*args)
+    def parse_with_mock_date(string = '-4712-01-01', comp = true, start = Date::ITALY, limit: 128)
+      parsed_date = parse_without_mock_date(string, comp, start, limit: limit)
       return parsed_date unless mocked_time_stack_item
-      date_hash = Date._parse(*args)
+      date_hash = Date._parse(string, comp, limit: limit)
 
       case
       when date_hash[:year] && date_hash[:mon]
         parsed_date
       when date_hash[:mon] && date_hash[:mday]
-        Date.new(mocked_time_stack_item.year, date_hash[:mon], date_hash[:mday])
+        Date.new(mocked_time_stack_item.year, date_hash[:mon], date_hash[:mday], start)
       when date_hash[:mday]
-        Date.new(mocked_time_stack_item.year, mocked_time_stack_item.month, date_hash[:mday])
+        Date.new(mocked_time_stack_item.year, mocked_time_stack_item.month, date_hash[:mday], start)
       when date_hash[:wday]
         closest_wday(date_hash[:wday])
       else
@@ -131,29 +131,29 @@ class DateTime #:nodoc:
 
     alias_method :now, :now_with_mock_time
 
-    def parse_with_mock_date(*args)
-      parsed_date = parse_without_mock_date(*args)
+    def parse_with_mock_date(string='-4712-01-01T00:00:00+00:00', comp=true, start=Date::ITALY, limit: 128)
+      parsed_date = parse_without_mock_date(string, comp, start, limit: limit)
       return parsed_date unless mocked_time_stack_item
-      date_hash = DateTime._parse(*args)
+      date_hash = DateTime._parse(string, comp, limit: limit)
 
       case
       when date_hash[:year] && date_hash[:mon]
         parsed_date
       when date_hash[:mon] && date_hash[:mday]
-        DateTime.new(mocked_time_stack_item.year, date_hash[:mon], date_hash[:mday])
+        DateTime.new(mocked_time_stack_item.year, date_hash[:mon], date_hash[:mday], 0, 0, 0, 0, start)
       when date_hash[:mday]
-        DateTime.new(mocked_time_stack_item.year, mocked_time_stack_item.month, date_hash[:mday])
+        DateTime.new(mocked_time_stack_item.year, mocked_time_stack_item.month, date_hash[:mday], 0, 0, 0, 0, start)
       when date_hash[:wday] && date_hash[:hour] && date_hash[:min]
         closest_date = Date.closest_wday(date_hash[:wday]).to_datetime
 
         DateTime.new(
           closest_date.year, closest_date.month, closest_date.day,
-          date_hash[:hour], date_hash[:min]
+          date_hash[:hour], date_hash[:min], 0, 0, start
         )
       when date_hash[:wday]
         Date.closest_wday(date_hash[:wday]).to_datetime
       when date_hash[:hour] && date_hash[:min] && date_hash[:sec]
-        DateTime.new(mocked_time_stack_item.year, mocked_time_stack_item.month, mocked_time_stack_item.day, date_hash[:hour], date_hash[:min], date_hash[:sec])
+        DateTime.new(mocked_time_stack_item.year, mocked_time_stack_item.month, mocked_time_stack_item.day, date_hash[:hour], date_hash[:min], date_hash[:sec], 0, start)
       else
         parsed_date + mocked_time_stack_item.travel_offset_days
       end
