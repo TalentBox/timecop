@@ -1,10 +1,10 @@
 require 'bundler/setup'
 require 'minitest/autorun'
-require 'minitest/rg'
+require 'pry'
 
 $VERBOSE = true # enable ruby warnings
 
-require 'mocha/setup'
+require 'mocha/minitest'
 
 class Minitest::Test
   private
@@ -28,7 +28,7 @@ class Minitest::Test
       Time.at(time.to_i).to_datetime.offset
     end
 
-    TIMEZONES = ["Europe/Paris", "UTC", "America/Chicago"]
+    TIMEZONES = ["Pacific/Midway", "Europe/Paris", "UTC", "America/Chicago"]
 
     def each_timezone
       old_tz = ENV["TZ"]

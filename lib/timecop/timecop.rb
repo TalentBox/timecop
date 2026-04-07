@@ -1,5 +1,4 @@
 require 'singleton'
-require File.join(File.dirname(__FILE__), "time_extensions")
 require File.join(File.dirname(__FILE__), "time_stack_item")
 
 # Timecop
@@ -14,6 +13,8 @@ class Timecop
   include Singleton
 
   class << self
+    private :instance
+
     # Allows you to run a block of code and "fake" a time throughout the execution of that block.
     # This is particularly useful for writing test methods where the passage of time is critical to the business
     # logic being tested.  For example:
@@ -36,6 +37,12 @@ class Timecop
     # When a block is also passed, Time.now, DateTime.now and Date.today are all reset to their
     # previous values after the block has finished executing.  This allows us to nest multiple
     # calls to Timecop.travel and have each block maintain it's concept of "now."
+    #
+    # The Process.clock_gettime call mocks both CLOCK::MONOTIC and CLOCK::REALTIME
+    #
+    # CLOCK::MONOTONIC works slightly differently than other clocks. This clock cannot move to a
+    # particular date/time. So the only option that changes this clock is #4 which will move the
+    # clock the requested offset. Otherwise the clock is frozen to the current tick.
     #
     # * Note: Timecop.freeze will actually freeze time.  This can cause unanticipated problems if
     #   benchmark or other timing calls are executed, which implicitly expect Time to actually move
@@ -75,11 +82,11 @@ class Timecop
     end
 
     def baseline
-      instance.send(:baseline)
+      instance.baseline
     end
 
     def baseline=(baseline)
-      instance.send(:baseline=, baseline)
+      instance.baseline = baseline
     end
 
     # Reverts back to system's Time.now, Date.today and DateTime.now (if it exists) permamently when
@@ -87,20 +94,21 @@ class Timecop
     # the given block.
     def return(&block)
       if block_given?
-        instance.send(:return, &block)
+        instance.return(&block)
       else
-        instance.send(:unmock!)
+        instance.unmock!
         nil
       end
     end
+    alias :unfreeze :return
 
     def return_to_baseline
-      instance.send(:return_to_baseline)
+      instance.return_to_baseline
       Time.now
     end
 
     def top_stack_item #:nodoc:
-      instance.send(:stack).last
+      instance.stack.last
     end
 
     def safe_mode=(safe)
@@ -112,26 +120,42 @@ class Timecop
     end
 
     def thread_safe=(t)
-      instance.send(:thread_safe=, t)
+      instance.thread_safe = t
     end
 
     def thread_safe
-      instance.send(:thread_safe)
+      instance.thread_safe
     end
 
-    # Returns whether or not Timecop is currently frozen/travelled
+    # Returns whether or not Timecop is currently frozen
     def frozen?
-      !instance.send(:stack).empty?
+      !instance.stack.empty? && instance.stack.last.mock_type == :freeze
+    end
+
+    # Returns whether or not Timecop is currently travelled
+    def travelled?
+      !instance.stack.empty? && instance.stack.last.mock_type == :travel
+    end
+
+    # Returns whether or not Timecop is currently scaled
+    def scaled?
+      !instance.stack.empty? && instance.stack.last.mock_type == :scale
+    end
+
+    def mock_process_clock=(mock)
+      @mock_process_clock = mock
+    end
+
+    def mock_process_clock?
+      @mock_process_clock ||= false
     end
 
     private
     def send_travel(mock_type, *args, &block)
-      val = instance.send(:travel, mock_type, *args, &block)
+      val = instance.travel(mock_type, *args, &block)
       block_given? ? val : Time.now
     end
   end
-
-  private
 
   def baseline=(b)
     set_baseline(b)
@@ -200,7 +224,7 @@ class Timecop
       begin
         yield stack_item.time
       ensure
-        @stack.replace stack_backup
+        stack.replace stack_backup
         @safe = safe_backup
       end
     end
@@ -235,3 +259,6 @@ class Timecop
     end
   end
 end
+
+# This must be done after TimeCop is available
+require File.join(File.dirname(__FILE__), "time_extensions")

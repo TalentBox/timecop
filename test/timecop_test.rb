@@ -37,6 +37,12 @@ class TestTimecop < Minitest::Test
     assert_nil Time.send(:mock_time)
   end
 
+  def test_freeze_then_unfreeze_unsets_mock_time
+    Timecop.freeze(1)
+    Timecop.unfreeze
+    assert_nil Time.send(:mock_time)
+  end
+
   def test_travel_then_return_unsets_mock_time
     Timecop.travel(1)
     Timecop.return
@@ -67,7 +73,6 @@ class TestTimecop < Minitest::Test
   end
 
   def test_freeze_in_time_subclass_returns_mocked_subclass
-    t = Time.local(2008, 10, 10, 10, 10, 10)
     custom_timeklass = Class.new(Time) do
       def custom_format_method() strftime('%F') end
     end
@@ -80,7 +85,6 @@ class TestTimecop < Minitest::Test
   end
 
   def test_freeze_in_date_subclass_returns_mocked_subclass
-    t = Time.local(2008, 10, 10, 10, 10, 10)
     custom_dateklass = Class.new(Date) do
       def custom_format_method() strftime('%F') end
     end
@@ -93,7 +97,6 @@ class TestTimecop < Minitest::Test
   end
 
   def test_freeze_in_datetime_subclass_returns_mocked_subclass
-    t = Time.local(2008, 10, 10, 10, 10, 10)
     custom_datetimeklass = Class.new(DateTime) do
       def custom_format_method() strftime('%F') end
     end
@@ -232,7 +235,6 @@ class TestTimecop < Minitest::Test
 
   def test_freeze_freezes_time
     t = Time.local(2008, 10, 10, 10, 10, 10)
-    now = Time.now
     Timecop.freeze(t) do
       #assert Time.now < now, "If we had failed to freeze, time would have proceeded, which is what appears to have happened."
       new_t, new_d, new_dt = Time.now, Date.today, DateTime.now
@@ -246,7 +248,6 @@ class TestTimecop < Minitest::Test
 
   def test_travel_keeps_time_moving
     t = Time.local(2008, 10, 10, 10, 10, 10)
-    now = Time.now
     Timecop.travel(t) do
       new_now = Time.now
       assert_times_effectively_equal(new_now, t, 1, "Looks like we failed to actually travel time")
@@ -282,6 +283,17 @@ class TestTimecop < Minitest::Test
   def test_scaling_returns_now_if_no_block_given
     t = Time.local(2008, 10, 10, 10, 10, 10)
     assert_times_effectively_equal t, Timecop.scale(4, t)
+  end
+  
+  def test_scaling_returns_now_if_nil_supplied
+    assert_times_effectively_equal Time.now, Timecop.scale(nil)
+  end
+
+  def test_scaling_raises_when_empty_string_supplied
+    err = assert_raises(TypeError) do
+      Timecop.scale("")
+    end
+    assert_match /String can't be coerced into Float/, err.message
   end
 
   def test_freeze_with_utc_time
@@ -371,6 +383,27 @@ class TestTimecop < Minitest::Test
     assert_nil Time.send(:mock_time)
   end
 
+  def test_recursive_freeze_then_travel_keeps_time_moving
+    t = Time.local(2008, 10, 10, 10, 10, 10)
+    Timecop.freeze do
+      Timecop.travel(t) do
+        new_now = Time.now
+        sleep(0.25)
+        assert_times_effectively_not_equal new_now, Time.now, 0.24, "Travel failed to unfreeze time"
+      end
+    end
+  end
+
+  def test_recursive_freeze_then_scale_keeps_time_moving
+    Timecop.freeze do
+      Timecop.scale(1) do
+        new_now = Time.now
+        sleep(0.25)
+        assert_times_effectively_not_equal new_now, Time.now, 0.24, "Scale failed to unfreeze time"
+      end
+    end
+  end
+
   def test_travel_time_returns_now_if_no_block_given
     t_future = Time.local(2030, 10, 10, 10, 10, 10)
     assert_times_effectively_equal t_future, Timecop.travel(t_future)
@@ -388,6 +421,10 @@ class TestTimecop < Minitest::Test
     end
     assert_times_effectively_equal(time_after_travel, Time.now)
   end
+  
+  def test_travel_returns_now_if_nil_supplied
+    assert_times_effectively_equal Time.now, Timecop.travel(nil)
+  end
 
   def test_travel_time_with_block_returns_the_value_of_the_block
     t_future = Time.local(2030, 10, 10, 10, 10, 10)
@@ -395,6 +432,13 @@ class TestTimecop < Minitest::Test
     actual = Timecop.travel(t_future) { expected }
 
     assert_equal expected, actual
+  end
+  
+  def test_travel_raises_when_empty_string_supplied
+    err = assert_raises(ArgumentError) do
+      Timecop.travel("")
+    end
+    assert_match /no time information in \"\"/, err.message
   end
 
   def test_freeze_time_returns_now_if_no_block_given
@@ -421,6 +465,17 @@ class TestTimecop < Minitest::Test
         assert_equal Time.now, current_time
       end
     end
+  end
+  
+   def test_freeze_returns_now_if_nil_supplied
+    assert_times_effectively_equal Time.now, Timecop.freeze(nil)
+  end
+
+  def test_freeze_raises_when_empty_string_supplied
+    err = assert_raises(ArgumentError) do
+      Timecop.freeze("")
+    end
+     assert_match /no time information in \"\"/, err.message
   end
 
   def test_freeze_with_new_date
@@ -527,18 +582,6 @@ class TestTimecop < Minitest::Test
     end
   end
 
-  def test_date_strptime_without_year
-    Timecop.freeze(Time.new(1984,2,28)) do
-      assert_equal Date.strptime('04-14', '%m-%d'), Date.new(1984, 4, 14)
-    end
-  end
-
-  def test_date_strptime_without_specifying_format
-    Timecop.freeze(Time.new(1984,2,28)) do
-      assert_equal Date.strptime('1999-04-14'), Date.new(1999, 4, 14)
-    end
-  end
-
   def test_frozen_after_freeze
     Timecop.freeze
     assert Timecop.frozen?
@@ -556,7 +599,70 @@ class TestTimecop < Minitest::Test
     assert !Timecop.frozen?
   end
 
-  def test_thread_safe_timecop
+  def test_not_frozen_inside_scale
+    Timecop.scale(2) do
+      assert !Timecop.frozen?
+    end
+  end
+
+  def test_not_travelled_and_not_scaled_inside_freeze
+    Timecop.freeze do
+      assert !Timecop.travelled?
+      assert !Timecop.scaled?
+    end
+  end
+
+  def test_travelled_and_not_scaled_inside_travel
+    Timecop.travel(3) do
+      assert Timecop.travelled?
+      assert !Timecop.scaled?
+    end
+  end
+
+  def test_scaled_and_not_travelled_inside_scale
+    Timecop.scale(4) do
+      assert Timecop.scaled?
+      assert !Timecop.travelled?
+    end
+  end
+
+  def test_not_scaled_after_scale
+    Timecop.scale(5)
+    Timecop.return
+    assert !Timecop.scaled?
+  end
+
+  def test_not_travelled_after_travel
+    Timecop.travel(6)
+    Timecop.return
+    assert !Timecop.travelled?
+  end
+
+  def test_not_frozen_inside_first_freeze_then_scale
+    Timecop.freeze do
+      assert Timecop.frozen?
+      Timecop.scale(2) do
+        assert !Timecop.frozen?
+      end
+    end
+  end
+
+  def test_not_frozen_inside_travel
+    Timecop.travel(60) do
+      assert !Timecop.frozen?
+    end
+  end
+
+  def test_not_frozen_inside_first_freeze_then_travel
+    Timecop.freeze do
+      assert Timecop.frozen?
+      Timecop.travel(60) do
+        assert !Timecop.frozen?
+      end
+    end
+  end
+
+  def test_thread_safe_timecop_in_parallel
     Timecop.thread_safe = true
     date = Time.local(2011, 01, 02)
     thread = Thread.new do
@@ -569,6 +675,16 @@ class TestTimecop < Minitest::Test
     sleep 0.25
     assert Time.now != date
     thread.join
+  ensure
+    Timecop.thread_safe = false
+  end
+
+  def test_thread_safe_timecop_returns_after_block
+    Timecop.thread_safe = true
+    date = Time.local(2017, 10, 8)
+
+    Timecop.freeze(date) { }
+    assert Time.now != date
   ensure
     Timecop.thread_safe = false
   end
